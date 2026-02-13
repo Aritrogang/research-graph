@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* React Flow overrides */
+.react-flow__node-paperNode {
+  font-size: 12px;
+}

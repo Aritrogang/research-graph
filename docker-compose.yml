@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector extension for vector similarity search
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: researchgraph-db
+    environment:
+      POSTGRES_USER: researchgraph
+      POSTGRES_PASSWORD: researchgraph_secret
+      POSTGRES_DB: researchgraph_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U researchgraph -d researchgraph_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - researchgraph-network
+
+  # Redis for Celery task queue (optional, for background jobs)
+  redis:
+    image: redis:7-alpine
+    container_name: researchgraph-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - researchgraph-network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: researchgraph-api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://researchgraph:researchgraph_secret@postgres:5432/researchgraph_db
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - paper_storage:/app/storage/papers
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - researchgraph-network
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: researchgraph-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - researchgraph-network
+
+volumes:
+  postgres_data:
+  paper_storage:
+
+networks:
+  researchgraph-network:
+    driver: bridge
