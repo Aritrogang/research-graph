@@ -31,7 +31,7 @@ async def get_graph(paper_id: str, db: AsyncSession = Depends(get_db)):
     # Fetch the center paper
     result = await db.execute(
         text(
-            "SELECT id, arxiv_id, title, authors, published_date, references, cited_by "
+            'SELECT id, arxiv_id, title, authors, published_date, "references", cited_by '
             "FROM papers WHERE id::text = :pid OR arxiv_id = :pid"
         ),
         {"pid": paper_id},

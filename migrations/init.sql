@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS papers (
     pdf_url TEXT,
     local_pdf_path TEXT,
 
-    -- Citation graph data
-    references JSONB DEFAULT '[]',
+    -- Citation graph data ("references" is a reserved word, must be quoted)
+    "references" JSONB DEFAULT '[]',
     cited_by JSONB DEFAULT '[]',
 
     -- Processing status
@@ -55,8 +55,8 @@ CREATE TABLE IF NOT EXISTS paper_chunks (
     page_number INTEGER,
     section_title TEXT,
 
-    -- Vector embedding (OpenAI ada-002 = 1536 dimensions)
-    embedding vector(1536),
+    -- Vector embedding (Gemini text-embedding-004 = 768 dimensions)
+    embedding vector(768),
 
     -- Token count for context window management
     token_count INTEGER,
@@ -142,7 +142,7 @@ CREATE TRIGGER update_papers_updated_at
 
 -- Function to search similar chunks by embedding
 CREATE OR REPLACE FUNCTION search_similar_chunks(
-    query_embedding vector(1536),
+    query_embedding vector(768),
     target_paper_id UUID,
     match_count INT DEFAULT 5,
     match_threshold FLOAT DEFAULT 0.7

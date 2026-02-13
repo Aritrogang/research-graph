@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies for PDF processing
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY backend/requirements.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend code
+COPY backend/ .
+
+# Copy migrations for startup
+COPY migrations/ /app/migrations/
+
+# Create storage directory
+RUN mkdir -p /app/storage/papers
+
+RUN chmod +x /app/start.sh
+
+EXPOSE 8000
+
+CMD ["bash", "/app/start.sh"]

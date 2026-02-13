@@ -2,7 +2,7 @@
 
 import hashlib
 
-import openai
+import google.generativeai as genai
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,43 +14,49 @@ from app.schemas.chat import ChatRequest, ChatResponse
 router = APIRouter()
 settings = get_settings()
 
+# Configure Gemini SDK once at module level
+genai.configure(api_key=settings.gemini_api_key)
+
 
 def _hash_question(question: str) -> str:
     return hashlib.sha256(question.strip().lower().encode()).hexdigest()
 
 
-async def _get_embedding(text_input: str) -> list[float]:
-    """Generate an embedding for the given text using OpenAI."""
-    client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
-    response = await client.embeddings.create(
-        model=settings.openai_embedding_model,
-        input=text_input,
+def _get_embedding(text_input: str) -> list[float]:
+    """Generate a 768-dim embedding using Gemini text-embedding-004."""
+    result = genai.embed_content(
+        model=settings.gemini_embedding_model,
+        content=text_input,
+        task_type="RETRIEVAL_QUERY",
     )
-    return response.data[0].embedding
+    return result["embedding"]
 
 
-async def _generate_answer(question: str, context_chunks: list[str]) -> tuple[str, int]:
-    """Send the question + context to GPT-4o-mini and return (answer, tokens_used)."""
+def _generate_answer(question: str, context_chunks: list[str]) -> tuple[str, int]:
+    """Send the question + context to Gemini and return (answer, tokens_used)."""
     context = "\n\n---\n\n".join(context_chunks)
     prompt = (
+        "You are a helpful research assistant that answers questions about academic papers. "
         "Answer the question based only on the following context from a research paper. "
         "If the context does not contain enough information, say so.\n\n"
         f"Context:\n{context}\n\n"
         f"Question: {question}"
     )
-    client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
-    response = await client.chat.completions.create(
-        model=settings.openai_chat_model,
-        messages=[
-            {"role": "system", "content": "You are a helpful research assistant that answers questions about academic papers."},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.3,
-        max_tokens=1024,
+    model = genai.GenerativeModel(
+        settings.gemini_chat_model,
+        generation_config=genai.GenerationConfig(
+            temperature=0.3,
+            max_output_tokens=1024,
+        ),
     )
-    answer = response.choices[0].message.content
-    tokens_used = response.usage.total_tokens if response.usage else 0
-    return answer, tokens_used
+    response = model.generate_content(prompt)
+    tokens_used = 0
+    if response.usage_metadata:
+        tokens_used = (
+            response.usage_metadata.prompt_token_count
+            + response.usage_metadata.candidates_token_count
+        )
+    return response.text, tokens_used
 
 
 @router.post("", response_model=ChatResponse)
@@ -73,7 +79,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     cached = cache_result.mappings().first()
 
     if cached:
-        # Bump hit counter in the background
+        # Bump hit counter
         await db.execute(text("SELECT increment_cache_hit(:cid)"), {"cid": cached["id"]})
         await db.commit()
 
@@ -100,7 +106,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     resolved_paper_id = str(paper_row[0])
 
     # ── 3. Vector search for relevant chunks ────────────────────────
-    question_embedding = await _get_embedding(question)
+    question_embedding = _get_embedding(question)
     embedding_literal = "[" + ",".join(str(v) for v in question_embedding) + "]"
 
     similar_result = await db.execute(
@@ -122,7 +128,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     chunk_ids_used = [str(row["id"]) for row in similar_rows]
 
     # ── 4. LLM generation ──────────────────────────────────────────
-    answer, tokens_used = await _generate_answer(question, context_chunks)
+    answer, tokens_used = _generate_answer(question, context_chunks)
 
     # ── 5. Save to cache ───────────────────────────────────────────
     await db.execute(
@@ -136,7 +142,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             "qhash": q_hash,
             "ans": answer,
             "cids": str(chunk_ids_used).replace("'", '"'),
-            "model": settings.openai_chat_model,
+            "model": settings.gemini_chat_model,
             "tokens": tokens_used,
         },
     )

@@ -10,11 +10,11 @@ A full-stack application for exploring academic paper citation networks with AI-
 │  (port 3000) │◀─────│  (port 8000)  │◀─────│  (port 5432)         │
 └──────────────┘      └──────┬───────┘      └──────────────────────┘
                              │
-                             ├──▶ OpenAI API (embeddings + chat)
+                             ├──▶ Gemini API (embeddings + chat)
                              └──▶ Redis (task queue)
 ```
 
-**Backend:** FastAPI, SQLAlchemy (async), pgvector, OpenAI API
+**Backend:** FastAPI, SQLAlchemy (async), pgvector, Gemini API
 
 **Frontend:** Next.js 14 (App Router), Tailwind CSS, React Flow, Lucide React
 
@@ -23,14 +23,14 @@ A full-stack application for exploring academic paper citation networks with AI-
 ## Features
 
 - **Citation Graph** — Interactive node-based visualization of paper relationships using React Flow. Click a node to expand its citations dynamically.
-- **Paper Q&A** — Ask questions about any paper. Answers are generated from the paper's actual content using vector similarity search + GPT-4o-mini.
+- **Paper Q&A** — Ask questions about any paper. Answers are generated from the paper's actual content using vector similarity search + Gemini 2.0 Flash.
 - **Response Caching** — Repeated questions return instantly from a cache layer, saving API costs and latency.
 - **Split-Screen UI** — 65/35 layout with the graph on the left and chat on the right. Clicking a paper node switches the chat context.
 
 ## Prerequisites
 
 - Docker and Docker Compose
-- An OpenAI API key
+- A Google Gemini API key
 
 ## Quick Start
 
@@ -38,7 +38,7 @@ A full-stack application for exploring academic paper citation networks with AI-
 # 1. Clone and configure
 git clone <repo-url> && cd research-graph
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
+# Edit .env and add your GEMINI_API_KEY
 
 # 2. Start all services
 docker compose up --build -d
@@ -136,12 +136,45 @@ The seed script populates the database with these papers and their cross-referen
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key (required) | — |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://researchgraph:researchgraph_secret@localhost:5432/researchgraph_db` |
+| `GEMINI_API_KEY` | Google Gemini API key (required) | — |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://...@localhost:5432/researchgraph_db` |
 | `REDIS_URL` | Redis connection string | `redis://localhost:6379/0` |
+| `FRONTEND_URL` | Vercel frontend URL for CORS (production) | — |
 | `NEXT_PUBLIC_API_URL` | Backend URL for the frontend | `http://localhost:8000` |
 
-## Development
+## Deployment
+
+### Backend + Database — Render
+
+1. Push the repo to GitHub.
+2. Go to [Render Dashboard](https://dashboard.render.com) and click **New > Blueprint**.
+3. Connect your repo — Render reads `render.yaml` and creates:
+   - **PostgreSQL** database (Starter plan, pgvector-ready)
+   - **Web service** running the FastAPI backend
+4. In the Render dashboard, set the environment variables:
+   - `GEMINI_API_KEY` — your Gemini API key
+   - `FRONTEND_URL` — your Vercel URL (e.g. `https://research-graph.vercel.app`)
+5. The first deploy runs `start.sh`, which auto-applies `migrations/init.sql`.
+6. Note your Render service URL (e.g. `https://researchgraph-api.onrender.com`).
+
+### Frontend — Vercel
+
+1. Go to [vercel.com/new](https://vercel.com/new) and import the repo.
+2. Set the **Root Directory** to `frontend`.
+3. Add the environment variable:
+   - `NEXT_PUBLIC_API_URL` = your Render backend URL (e.g. `https://researchgraph-api.onrender.com`)
+4. Deploy. Vercel auto-detects Next.js and builds it.
+
+### Post-Deploy: Seed the Database
+
+```bash
+# Set DATABASE_URL to your Render external connection string
+export DATABASE_URL="postgresql://researchgraph:...@...render.com:5432/researchgraph_db"
+pip install asyncpg
+python scripts/seed.py
+```
+
+## Development (Local)
 
 Run services individually for local development:
 

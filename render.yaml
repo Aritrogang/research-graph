@@ -1,0 +1,27 @@
+databases:
+  - name: researchgraph-db
+    plan: starter
+    databaseName: researchgraph_db
+    user: researchgraph
+    ipAllowList: []
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: researchgraph-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: researchgraph-db
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: ENVIRONMENT
+        value: production
