@@ -21,6 +21,9 @@ export interface GraphNode {
     year: number | string;
     authors: string[];
     isCenter: boolean;
+    readingOrder?: number;
+    difficulty?: string;
+    reason?: string;
   };
 }
 
@@ -35,6 +38,34 @@ export interface GraphResponse {
   nodes: GraphNode[];
   edges: GraphEdge[];
 }
+
+// ── Discover types ──────────────────────────────────────────────────
+
+export interface DiscoverRequest {
+  topic: string;
+  background: string;
+  count: number;
+}
+
+export interface PaperSummary {
+  id: string;
+  arxiv_id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  abstract: string;
+  reading_order: number;
+  difficulty: string;
+  reason: string;
+}
+
+export interface DiscoverResponse {
+  topic: string;
+  background: string;
+  papers: PaperSummary[];
+}
+
+// ── API functions ───────────────────────────────────────────────────
 
 export async function postChat(req: ChatRequest): Promise<ChatResponse> {
   const res = await fetch(`${API_URL}/chat`, {
@@ -54,6 +85,19 @@ export async function fetchGraph(paperId: string): Promise<GraphResponse> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || "Graph fetch failed");
+  }
+  return res.json();
+}
+
+export async function discoverPapers(req: DiscoverRequest): Promise<DiscoverResponse> {
+  const res = await fetch(`${API_URL}/discover`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || "Discovery failed");
   }
   return res.json();
 }

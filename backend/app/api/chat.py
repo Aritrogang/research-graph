@@ -37,8 +37,10 @@ def _generate_answer(question: str, context_chunks: list[str]) -> tuple[str, int
     context = "\n\n---\n\n".join(context_chunks)
     prompt = (
         "You are a helpful research assistant that answers questions about academic papers. "
-        "Answer the question based only on the following context from a research paper. "
-        "If the context does not contain enough information, say so.\n\n"
+        "Answer the question based on the following context from a research paper. "
+        "Provide helpful background knowledge to help the student understand the concepts. "
+        "If the context is limited (e.g. just an abstract), use your general knowledge to "
+        "explain the paper's key ideas, methods, and significance in an accessible way.\n\n"
         f"Context:\n{context}\n\n"
         f"Question: {question}"
     )
@@ -97,13 +99,15 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     # ── 2. Verify paper exists ──────────────────────────────────────
     paper_check = await db.execute(
-        text("SELECT id FROM papers WHERE id = :pid OR arxiv_id = :pid"),
+        text("SELECT id, title, abstract FROM papers WHERE id = :pid OR arxiv_id = :pid"),
         {"pid": paper_id},
     )
-    paper_row = paper_check.first()
+    paper_row = paper_check.mappings().first()
     if not paper_row:
         raise HTTPException(status_code=404, detail=f"Paper '{paper_id}' not found")
-    resolved_paper_id = str(paper_row[0])
+    resolved_paper_id = str(paper_row["id"])
+    paper_title = paper_row["title"] or ""
+    paper_abstract = paper_row["abstract"] or ""
 
     # ── 3. Vector search for relevant chunks ────────────────────────
     question_embedding = _get_embedding(question)
@@ -121,11 +125,16 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     )
     similar_rows = similar_result.mappings().fetchall()
 
-    if not similar_rows:
+    if not similar_rows and not paper_abstract:
         raise HTTPException(status_code=404, detail="No chunks found for this paper. Has it been ingested?")
 
-    context_chunks = [row["content"] for row in similar_rows]
-    chunk_ids_used = [str(row["id"]) for row in similar_rows]
+    if similar_rows:
+        context_chunks = [row["content"] for row in similar_rows]
+        chunk_ids_used = [str(row["id"]) for row in similar_rows]
+    else:
+        # Fallback: use the paper's abstract as context so Q&A still works
+        context_chunks = [f"Paper: {paper_title}\n\nAbstract: {paper_abstract}"]
+        chunk_ids_used = []
 
     # ── 4. LLM generation ──────────────────────────────────────────
     answer, tokens_used = _generate_answer(question, context_chunks)

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.chat import router as chat_router
+from app.api.discover import router as discover_router
 from app.api.graph import router as graph_router
 from app.core.config import get_settings
 
@@ -28,6 +29,7 @@ app.add_middleware(
 )
 
 app.include_router(chat_router, prefix="/chat", tags=["chat"])
+app.include_router(discover_router, prefix="/discover", tags=["discover"])
 app.include_router(graph_router, prefix="/graph", tags=["graph"])
 
 
