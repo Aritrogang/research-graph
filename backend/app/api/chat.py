@@ -34,15 +34,69 @@ def _get_embedding(text_input: str) -> list[float]:
     return result["embedding"]
 
 
+def _build_paper_context(paper_row) -> str:
+    """Build a rich text context from all available paper metadata."""
+    parts = []
+
+    title = paper_row["title"] or "Unknown"
+    parts.append(f"Title: {title}")
+
+    arxiv_id = paper_row.get("arxiv_id", "")
+    if arxiv_id:
+        parts.append(f"arXiv ID: {arxiv_id}")
+
+    authors = paper_row.get("authors") or []
+    if authors:
+        if isinstance(authors, str):
+            parts.append(f"Authors: {authors}")
+        else:
+            parts.append(f"Authors: {', '.join(authors)}")
+            parts.append(f"Number of authors: {len(authors)}")
+
+    pub_date = paper_row.get("published_date")
+    if pub_date:
+        parts.append(f"Published: {pub_date}")
+
+    categories = paper_row.get("categories") or []
+    if categories:
+        if isinstance(categories, str):
+            parts.append(f"Categories: {categories}")
+        else:
+            parts.append(f"Categories: {', '.join(categories)}")
+
+    pdf_url = paper_row.get("pdf_url")
+    if pdf_url:
+        parts.append(f"PDF URL: {pdf_url}")
+
+    refs = paper_row.get("references") or []
+    if refs:
+        parts.append(f"Number of references: {len(refs)}")
+        parts.append(f"References (arXiv IDs): {', '.join(str(r) for r in refs[:20])}")
+
+    cited_by = paper_row.get("cited_by") or []
+    if cited_by:
+        parts.append(f"Cited by: {len(cited_by)} papers")
+
+    abstract = paper_row.get("abstract") or ""
+    if abstract:
+        parts.append(f"\nAbstract:\n{abstract}")
+
+    return "\n".join(parts)
+
+
 def _generate_answer(question: str, context_chunks: list[str]) -> tuple[str, int]:
     """Send the question + context to Gemini and return (answer, tokens_used)."""
     context = "\n\n---\n\n".join(context_chunks)
     prompt = (
         "You are a helpful research assistant that answers questions about academic papers. "
-        "Answer the question based on the following context from a research paper. "
-        "Provide helpful background knowledge to help the student understand the concepts. "
-        "If the context is limited (e.g. just an abstract), use your general knowledge to "
-        "explain the paper's key ideas, methods, and significance in an accessible way.\n\n"
+        "You have access to the paper's full metadata including title, authors, publication date, "
+        "abstract, categories, references, and more. "
+        "Answer the question accurately based on the provided context. "
+        "For factual questions (who wrote it, when was it published, how many references, etc.), "
+        "answer directly from the metadata. "
+        "For conceptual questions, provide helpful background knowledge to help the student understand. "
+        "If the context doesn't fully answer the question, use your general knowledge to supplement, "
+        "but clearly indicate when you're doing so.\n\n"
         f"Context:\n{context}\n\n"
         f"Question: {question}"
     )
@@ -99,19 +153,24 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
         return ChatResponse(answer=cached["answer"], source="cache", context_used=context_used)
 
-    # ── 2. Verify paper exists ──────────────────────────────────────
+    # ── 2. Verify paper exists and fetch all metadata ───────────────
     paper_check = await db.execute(
-        text("SELECT id, title, abstract FROM papers WHERE id::text = :pid OR arxiv_id = :pid"),
+        text(
+            "SELECT id, arxiv_id, title, abstract, authors, categories, "
+            "published_date, pdf_url, \"references\", cited_by "
+            "FROM papers WHERE id::text = :pid OR arxiv_id = :pid"
+        ),
         {"pid": paper_id},
     )
     paper_row = paper_check.mappings().first()
     if not paper_row:
         raise HTTPException(status_code=404, detail=f"Paper '{paper_id}' not found")
     resolved_paper_id = str(paper_row["id"])
-    paper_title = paper_row["title"] or ""
-    paper_abstract = paper_row["abstract"] or ""
 
-    # ── 3. Check for chunks, then vector search or abstract fallback ─
+    # Build rich metadata context
+    paper_meta = _build_paper_context(paper_row)
+
+    # ── 3. Check for chunks, then vector search or metadata fallback ─
     chunk_count_result = await db.execute(
         text("SELECT COUNT(*) FROM paper_chunks WHERE paper_id = :pid"),
         {"pid": resolved_paper_id},
@@ -133,14 +192,13 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             {"qemb": embedding_literal, "pid": resolved_paper_id, "lim": settings.max_context_chunks},
         )
         similar_rows = similar_result.mappings().fetchall()
-        context_chunks = [row["content"] for row in similar_rows]
+        context_chunks = [paper_meta] + [row["content"] for row in similar_rows]
         chunk_ids_used = [str(row["id"]) for row in similar_rows]
-    elif paper_abstract:
-        # Fallback: use the paper's abstract as context so Q&A still works
-        context_chunks = [f"Paper: {paper_title}\n\nAbstract: {paper_abstract}"]
+    elif paper_row["abstract"]:
+        context_chunks = [paper_meta]
         chunk_ids_used = []
     else:
-        raise HTTPException(status_code=404, detail="No chunks found for this paper. Has it been ingested?")
+        raise HTTPException(status_code=404, detail="No content found for this paper.")
 
     # ── 4. LLM generation ──────────────────────────────────────────
     try:
