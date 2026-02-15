@@ -16,7 +16,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
-origins = ["http://localhost:3000", "http://researchgraph-frontend:3000"]
+origins = ["http://localhost:3000", "http://localhost:3001", "http://researchgraph-frontend:3000"]
 if settings.frontend_url:
     origins.append(settings.frontend_url)
 

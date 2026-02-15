@@ -4,6 +4,8 @@ import hashlib
 
 import google.generativeai as genai
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
+from google.api_core.exceptions import ResourceExhausted
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -99,7 +101,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     # ── 2. Verify paper exists ──────────────────────────────────────
     paper_check = await db.execute(
-        text("SELECT id, title, abstract FROM papers WHERE id = :pid OR arxiv_id = :pid"),
+        text("SELECT id, title, abstract FROM papers WHERE id::text = :pid OR arxiv_id = :pid"),
         {"pid": paper_id},
     )
     paper_row = paper_check.mappings().first()
@@ -109,41 +111,51 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     paper_title = paper_row["title"] or ""
     paper_abstract = paper_row["abstract"] or ""
 
-    # ── 3. Vector search for relevant chunks ────────────────────────
-    question_embedding = _get_embedding(question)
-    embedding_literal = "[" + ",".join(str(v) for v in question_embedding) + "]"
-
-    similar_result = await db.execute(
-        text(
-            "SELECT id, content, 1 - (embedding <=> :qemb::vector) AS similarity "
-            "FROM paper_chunks "
-            "WHERE paper_id = :pid "
-            "ORDER BY similarity DESC "
-            "LIMIT :lim"
-        ),
-        {"qemb": embedding_literal, "pid": resolved_paper_id, "lim": settings.max_context_chunks},
+    # ── 3. Check for chunks, then vector search or abstract fallback ─
+    chunk_count_result = await db.execute(
+        text("SELECT COUNT(*) FROM paper_chunks WHERE paper_id = :pid"),
+        {"pid": resolved_paper_id},
     )
-    similar_rows = similar_result.mappings().fetchall()
+    has_chunks = chunk_count_result.scalar() > 0
 
-    if not similar_rows and not paper_abstract:
-        raise HTTPException(status_code=404, detail="No chunks found for this paper. Has it been ingested?")
+    if has_chunks:
+        question_embedding = _get_embedding(question)
+        embedding_literal = "[" + ",".join(str(v) for v in question_embedding) + "]"
 
-    if similar_rows:
+        similar_result = await db.execute(
+            text(
+                "SELECT id, content, 1 - (embedding <=> CAST(:qemb AS vector)) AS similarity "
+                "FROM paper_chunks "
+                "WHERE paper_id = :pid "
+                "ORDER BY similarity DESC "
+                "LIMIT :lim"
+            ),
+            {"qemb": embedding_literal, "pid": resolved_paper_id, "lim": settings.max_context_chunks},
+        )
+        similar_rows = similar_result.mappings().fetchall()
         context_chunks = [row["content"] for row in similar_rows]
         chunk_ids_used = [str(row["id"]) for row in similar_rows]
-    else:
+    elif paper_abstract:
         # Fallback: use the paper's abstract as context so Q&A still works
         context_chunks = [f"Paper: {paper_title}\n\nAbstract: {paper_abstract}"]
         chunk_ids_used = []
+    else:
+        raise HTTPException(status_code=404, detail="No chunks found for this paper. Has it been ingested?")
 
     # ── 4. LLM generation ──────────────────────────────────────────
-    answer, tokens_used = _generate_answer(question, context_chunks)
+    try:
+        answer, tokens_used = _generate_answer(question, context_chunks)
+    except ResourceExhausted:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Gemini API rate limit reached. Please wait about 60 seconds and try again."},
+        )
 
     # ── 5. Save to cache ───────────────────────────────────────────
     await db.execute(
         text(
             "INSERT INTO chat_cache (paper_id, question, question_hash, answer, context_chunk_ids, model_used, tokens_used) "
-            "VALUES (:pid, :q, :qhash, :ans, :cids::jsonb, :model, :tokens)"
+            "VALUES (:pid, :q, :qhash, :ans, CAST(:cids AS jsonb), :model, :tokens)"
         ),
         {
             "pid": resolved_paper_id,

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # Gemini
     gemini_api_key: str = ""
     gemini_embedding_model: str = "models/text-embedding-004"
-    gemini_chat_model: str = "gemini-2.0-flash"
+    gemini_chat_model: str = "gemini-2.5-flash"
 
     # Chunking settings
     chunk_size: int = 1000
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     paper_storage_path: str = "/app/storage/papers"
 
     class Config:
-        env_file = ".env"
+        env_file = ("../.env", ".env")
         case_sensitive = False
 
 

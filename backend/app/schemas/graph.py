@@ -1,6 +1,6 @@
 """Pydantic schemas for the graph endpoint."""
 
-from typing import Any
+from typing import Any, Dict, List
 
 from pydantic import BaseModel
 
@@ -8,8 +8,8 @@ from pydantic import BaseModel
 class GraphNode(BaseModel):
     id: str
     type: str = "paperNode"
-    position: dict[str, float]
-    data: dict[str, Any]
+    position: Dict[str, float]
+    data: Dict[str, Any]
 
 
 class GraphEdge(BaseModel):
@@ -20,5 +20,5 @@ class GraphEdge(BaseModel):
 
 
 class GraphResponse(BaseModel):
-    nodes: list[GraphNode]
-    edges: list[GraphEdge]
+    nodes: List[GraphNode]
+    edges: List[GraphEdge]

@@ -1,6 +1,6 @@
 """Pydantic schemas for the chat endpoint."""
 
-from typing import Literal
+from typing import List, Literal
 
 from pydantic import BaseModel
 
@@ -13,4 +13,4 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     source: Literal["cache", "llm"]
-    context_used: list[str]
+    context_used: List[str]

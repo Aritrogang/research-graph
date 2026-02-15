@@ -3,6 +3,7 @@
 import json
 import re
 import uuid
+from typing import List
 
 import arxiv
 import google.generativeai as genai
@@ -35,8 +36,8 @@ def _strip_version(entry_id: str) -> str:
 def _order_papers_with_gemini(
     topic: str,
     background: str,
-    papers: list[dict],
-) -> list[dict]:
+    papers: List[dict],
+) -> List[dict]:
     """Use Gemini to order papers by reading difficulty for the given background."""
 
     paper_descriptions = []
@@ -111,7 +112,7 @@ def _order_papers_with_gemini(
     return ordered
 
 
-def _fallback_ordering(papers: list[dict]) -> list[dict]:
+def _fallback_ordering(papers: List[dict]) -> List[dict]:
     """Order papers chronologically (oldest first) as a fallback."""
     sorted_papers = sorted(papers, key=lambda p: p["year"] or 9999)
     for i, p in enumerate(sorted_papers):
@@ -142,7 +143,7 @@ async def discover_papers(request: DiscoverRequest, db: AsyncSession = Depends(g
         raise HTTPException(status_code=404, detail=f"No papers found for topic '{request.topic}'")
 
     # ── 2. Build paper list ──────────────────────────────────────────
-    papers_raw: list[dict] = []
+    papers_raw: List[dict] = []
     for result in results:
         aid = _strip_version(result.entry_id)
         paper_id = _deterministic_id(aid)
@@ -178,8 +179,8 @@ async def discover_papers(request: DiscoverRequest, db: AsyncSession = Depends(g
             text(
                 'INSERT INTO papers (id, arxiv_id, title, abstract, authors, categories, '
                 'published_date, pdf_url, "references", cited_by, is_processed) '
-                "VALUES (:id, :aid, :title, :abstract, :authors::jsonb, :cats::jsonb, "
-                ":pub_date, :pdf_url, :refs::jsonb, '[]'::jsonb, false) "
+                "VALUES (:id, :aid, :title, :abstract, CAST(:authors AS jsonb), CAST(:cats AS jsonb), "
+                ":pub_date, :pdf_url, CAST(:refs AS jsonb), CAST('[]' AS jsonb), false) "
                 "ON CONFLICT (arxiv_id) DO UPDATE SET "
                 'title = EXCLUDED.title, abstract = EXCLUDED.abstract, '
                 'authors = EXCLUDED.authors, "references" = EXCLUDED."references"'
@@ -192,7 +193,7 @@ async def discover_papers(request: DiscoverRequest, db: AsyncSession = Depends(g
                 "authors": json.dumps(paper["authors"]),
                 "cats": json.dumps(paper["categories"]),
                 "pub_date": paper["published"],
-                "pdf_url": paper["pdf_url"],
+                "pdf_url": str(paper["pdf_url"]) if paper["pdf_url"] else None,
                 "refs": json.dumps(other_ids),
             },
         )

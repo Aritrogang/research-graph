@@ -1,5 +1,7 @@
 """Schemas for the topic discovery endpoint."""
 
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -18,8 +20,8 @@ class PaperSummary(BaseModel):
     id: str
     arxiv_id: str
     title: str
-    authors: list[str]
-    year: int | None
+    authors: List[str]
+    year: Optional[int] = None
     abstract: str
     reading_order: int = Field(..., description="1-based reading order position")
     difficulty: str = Field(..., description="beginner, intermediate, or advanced")
@@ -29,4 +31,4 @@ class PaperSummary(BaseModel):
 class DiscoverResponse(BaseModel):
     topic: str
     background: str
-    papers: list[PaperSummary]
+    papers: List[PaperSummary]
