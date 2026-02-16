@@ -1,6 +1,8 @@
 # ResearchGraph
 
-A full-stack application for exploring academic paper citation networks with AI-powered Q&A. Upload papers from arXiv, visualize their citation relationships as an interactive graph, and ask questions answered directly from the paper content using RAG (Retrieval-Augmented Generation).
+**Live Site:** [https://research-graph-seven.vercel.app](https://research-graph-seven.vercel.app)
+
+A full-stack application for exploring academic paper citation networks with AI-powered Q&A. Discover papers from arXiv, visualize their citation relationships as an interactive graph, and ask questions answered directly from the paper content using RAG (Retrieval-Augmented Generation).
 
 ## Architecture
 
@@ -22,8 +24,9 @@ A full-stack application for exploring academic paper citation networks with AI-
 
 ## Features
 
+- **Topic Discovery** — Enter a research topic and background level. Gemini orders papers into an optimal reading path from foundational to advanced.
 - **Citation Graph** — Interactive node-based visualization of paper relationships using React Flow. Click a node to expand its citations dynamically.
-- **Paper Q&A** — Ask questions about any paper. Answers are generated from the paper's actual content using vector similarity search + Gemini 2.0 Flash.
+- **Paper Q&A** — Ask questions about any paper. Answers are generated from the paper's metadata and content using vector similarity search + Gemini 2.5 Flash.
 - **Response Caching** — Repeated questions return instantly from a cache layer, saving API costs and latency.
 - **Split-Screen UI** — 65/35 layout with the graph on the left and chat on the right. Clicking a paper node switches the chat context.
 
@@ -95,6 +98,7 @@ scripts/
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `POST` | `/discover` | Search arXiv for papers and build a Gemini-ordered reading path |
 | `POST` | `/chat` | Ask a question about a paper (cache check → vector search → LLM) |
 | `GET` | `/graph/{paper_id}` | Get citation network as React Flow nodes/edges |
 | `GET` | `/health` | Health check |
