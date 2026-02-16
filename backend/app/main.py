@@ -48,4 +48,10 @@ app.include_router(graph_router, prefix="/graph", tags=["graph"])
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "app": settings.app_name}
+    key = settings.gemini_api_key
+    return {
+        "status": "healthy",
+        "app": settings.app_name,
+        "gemini_key_set": bool(key and key != ""),
+        "gemini_key_prefix": key[:8] + "..." if key else "MISSING",
+    }
