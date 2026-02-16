@@ -64,10 +64,18 @@ CREATE TABLE IF NOT EXISTS paper_chunks (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for vector similarity search (IVFFlat for performance)
-CREATE INDEX IF NOT EXISTS idx_paper_chunks_embedding
-    ON paper_chunks USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
+-- Index for vector similarity search (IVFFlat)
+-- IVFFlat needs existing rows to build; wrap in exception handler so it
+-- doesn't block the rest of the migration on an empty table.
+DO $$
+BEGIN
+    CREATE INDEX IF NOT EXISTS idx_paper_chunks_embedding
+        ON paper_chunks USING ivfflat (embedding vector_cosine_ops)
+        WITH (lists = 100);
+EXCEPTION WHEN others THEN
+    RAISE NOTICE 'IVFFlat index skipped (likely empty table): %', SQLERRM;
+END;
+$$;
 
 CREATE INDEX IF NOT EXISTS idx_paper_chunks_paper_id ON paper_chunks(paper_id);
 
@@ -135,6 +143,7 @@ END;
 $$ language 'plpgsql';
 
 -- Trigger for papers table
+DROP TRIGGER IF EXISTS update_papers_updated_at ON papers;
 CREATE TRIGGER update_papers_updated_at
     BEFORE UPDATE ON papers
     FOR EACH ROW

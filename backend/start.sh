@@ -6,23 +6,18 @@ echo "Running database migrations..."
 # Convert async URL to sync for psql (postgresql+asyncpg:// → postgresql://)
 SYNC_URL=$(echo "$DATABASE_URL" | sed 's|postgresql+asyncpg://|postgresql://|')
 
-# Run init.sql if the papers table doesn't exist yet
+# Always run init.sql — all statements use IF NOT EXISTS / CREATE OR REPLACE
+# so it's safe to re-run and will create any missing tables or functions.
 python -c "
 import asyncio, asyncpg, os
 
 async def migrate():
     url = os.environ['DATABASE_URL'].replace('postgresql+asyncpg://', 'postgresql://')
     conn = await asyncpg.connect(url)
-    exists = await conn.fetchval(
-        \"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'papers')\"
-    )
-    if not exists:
-        print('Applying init.sql...')
-        with open('/app/migrations/init.sql', 'r') as f:
-            await conn.execute(f.read())
-        print('Migration complete.')
-    else:
-        print('Tables already exist, skipping migration.')
+    print('Applying init.sql (idempotent)...')
+    with open('/app/migrations/init.sql', 'r') as f:
+        await conn.execute(f.read())
+    print('Migration complete.')
     await conn.close()
 
 asyncio.run(migrate())
