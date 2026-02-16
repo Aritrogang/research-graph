@@ -1,6 +1,6 @@
 databases:
   - name: researchgraph-db
-    plan: starter
+    plan: free
     databaseName: researchgraph_db
     user: researchgraph
     ipAllowList: []
@@ -12,7 +12,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile.render
     dockerContext: .
-    plan: starter
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
