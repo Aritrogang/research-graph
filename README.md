@@ -46,11 +46,7 @@ cp .env.example .env
 # 2. Start all services
 docker compose up --build -d
 
-# 3. Seed the database with demo papers
-pip install asyncpg
-python scripts/seed.py
-
-# 4. Open the app
+# 3. Open the app
 open http://localhost:3000
 ```
 
@@ -63,6 +59,7 @@ backend/
     db.py                   # Async SQLAlchemy session factory
     api/
       chat.py               # POST /chat — RAG pipeline with caching
+      discover.py           # POST /discover — arXiv search + Gemini reading path
       graph.py              # GET /graph/{paper_id} — citation network
     models/
       paper.py              # ORM: Paper, PaperChunk, ChatCache, IngestionJob
@@ -90,8 +87,6 @@ frontend/
 migrations/
   init.sql                  # Full database schema (tables, indexes, functions)
 
-scripts/
-  seed.py                   # Populate DB with 5 famous CS papers
 ```
 
 ## API Endpoints
@@ -124,18 +119,6 @@ scripts/
 
 `source` is `"cache"` for cached responses or `"llm"` for freshly generated ones.
 
-## Seed Papers
-
-The seed script populates the database with these papers and their cross-references:
-
-| Paper | arXiv ID | Year |
-|-------|----------|------|
-| Attention Is All You Need | 1706.03762 | 2017 |
-| Deep Residual Learning for Image Recognition | 1512.03385 | 2015 |
-| BERT | 1810.04805 | 2018 |
-| Language Models are Few-Shot Learners (GPT-3) | 2005.14165 | 2020 |
-| Neural Machine Translation by Jointly Learning to Align and Translate | 1409.0473 | 2014 |
-
 ## Environment Variables
 
 | Variable | Description | Default |
@@ -153,7 +136,7 @@ The seed script populates the database with these papers and their cross-referen
 1. Push the repo to GitHub.
 2. Go to [Render Dashboard](https://dashboard.render.com) and click **New > Blueprint**.
 3. Connect your repo — Render reads `render.yaml` and creates:
-   - **PostgreSQL** database (Starter plan, pgvector-ready)
+   - **PostgreSQL** database (Free plan, pgvector-ready)
    - **Web service** running the FastAPI backend
 4. In the Render dashboard, set the environment variables:
    - `GEMINI_API_KEY` — your Gemini API key
@@ -168,15 +151,6 @@ The seed script populates the database with these papers and their cross-referen
 3. Add the environment variable:
    - `NEXT_PUBLIC_API_URL` = your Render backend URL (e.g. `https://researchgraph-api.onrender.com`)
 4. Deploy. Vercel auto-detects Next.js and builds it.
-
-### Post-Deploy: Seed the Database
-
-```bash
-# Set DATABASE_URL to your Render external connection string
-export DATABASE_URL="postgresql://researchgraph:...@...render.com:5432/researchgraph_db"
-pip install asyncpg
-python scripts/seed.py
-```
 
 ## Development (Local)
 
