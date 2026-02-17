@@ -24,7 +24,7 @@ A full-stack application for exploring academic paper citation networks with AI-
 
 ## Features
 
-- **Topic Discovery** — Enter a research topic and background level. Gemini orders papers into an optimal reading path from foundational to advanced.
+- **Topic Discovery** — Enter any research topic (CS, physics, biology, math, etc.) and background level. Gemini orders papers into an optimal reading path from foundational to advanced.
 - **Citation Graph** — Interactive node-based visualization of paper relationships using React Flow. Click a node to expand its citations dynamically.
 - **Paper Q&A** — Ask questions about any paper. Answers are generated from the paper's metadata and content using vector similarity search + Gemini 2.5 Flash.
 - **Response Caching** — Repeated questions return instantly from a cache layer, saving API costs and latency.
